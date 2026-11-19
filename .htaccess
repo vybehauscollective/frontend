@@ -1,6 +1,35 @@
+# Apache 2.4: serve generated SEO HTML at clean URLs, then the React application.
+# Preserve .htaccess when uploading the contents of frontend/dist.
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+DirectorySlash Off
+ErrorDocument 404 /404.html
+<IfModule mod_rewrite.c>
 RewriteEngine On
-RewriteBase /
-RewriteRule ^index\.html$ - [L]
+# Deployment checkouts must not expose Git metadata or private dotfiles.
+RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,L]
+# Internal file rewrites avoid DirectorySlash adding a trailing slash to canonical URLs.
+RewriteRule ^blog/?$ blog/index.html [END]
+RewriteCond %{DOCUMENT_ROOT}/blog/$1/index.html -f
+RewriteRule ^blog/([a-z0-9]+(?:-[a-z0-9]+)*)/?$ blog/$1/index.html [END]
+# Unpublished/unknown article URLs must return an actual HTTP 404.
+RewriteRule ^blog/[^/]+/?$ - [R=404,L]
+RewriteCond %{DOCUMENT_ROOT}/policies/$1/index.html -f
+RewriteRule ^policies/([a-z-]+)/?$ policies/$1/index.html [END]
+RewriteCond %{DOCUMENT_ROOT}/$1/index.html -f
+RewriteRule ^(events|experiences|about|contact|partnerships|accessibility)/?$ $1/index.html [END]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule . /index.html [L]
+RewriteRule . spa.html [END]
+</IfModule>
+<IfModule mod_setenvif.c>
+SetEnvIfNoCase Request_URI "^/(admin|account|booking|tickets|sign-in|sign-up|pre-registration)(/|$)" vh_private_route=1
+SetEnvIfNoCase Request_URI "^/events/[^/]+/checkout/?$" vh_private_route=1
+</IfModule>
+<IfModule mod_headers.c>
+Header always set X-Robots-Tag "noindex, nofollow, noarchive" env=vh_private_route
+Header always set X-Robots-Tag "noindex, nofollow, noarchive" env=REDIRECT_vh_private_route
+<FilesMatch "^(index\.html|spa\.html|404\.html|sw\.js|sitemap\.xml|robots\.txt)$">
+Header set Cache-Control "no-cache"
+</FilesMatch>
+</IfModule>
